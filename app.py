@@ -260,6 +260,34 @@ def score():
             if session['current_bowler_index'] >= 0 and not is_run_out:
                 session['bowlers'][session['current_bowler_index']]['wickets'] += 1
             
+            # Handle runout cases - determine who should be on strike
+            if is_wicket and is_run_out:
+                # Determine which batsman was run out
+                run_out_striker = (run_out_batsman == session['batsmen'][session['striker_index']]['name'])
+                run_out_non_striker = (run_out_batsman == session['batsmen'][session['non_striker_index']]['name']) if session['non_striker_index'] != -1 else False
+                
+                # If striker was run out and odd runs were scored, non-striker should stay on strike
+                if run_out_striker and runs % 2 == 1:
+                    # Non-striker becomes striker, new batsman comes at non-strike
+                    session['striker_index'] = session['non_striker_index']
+                    session['non_striker_index'] = -1  # Flag for new batsman at non-strike
+                
+                # If non-striker was run out and even runs were scored, striker should stay on strike
+                elif run_out_non_striker and runs % 2 == 0:
+                    # Striker stays on strike, new batsman comes at non-strike
+                    session['non_striker_index'] = -1  # Flag for new batsman at non-strike
+                
+                # If non-striker was run out and odd runs were scored, new batsman should come at strike
+                elif run_out_non_striker and runs % 2 == 1:
+                    # Current striker moves to non-strike, new batsman comes at strike
+                    session['non_striker_index'] = session['striker_index']  # Current striker moves to non-strike
+                    session['striker_index'] = -1  # Flag for new batsman at strike
+                
+                # If striker was run out and even runs were scored, new batsman should come at strike
+                elif run_out_striker and runs % 2 == 0:
+                    # New batsman comes at striker position, non-striker stays
+                    session['striker_index'] = -1  # Flag for new batsman at strike
+            
             # Logic for "last man standing"
             batting_team_players = session['team1'] if session['batting_team'] == session['team1_name'] else session['team2']
             total_players = len(batting_team_players)
@@ -289,6 +317,36 @@ def score():
                 
                 # Check if this was the last ball of the over
                 if session['current_ball'] >= 6:
+                    # End of over - move to next over with non-striker on strike
+                    session['current_over'] += 1
+                    session['current_ball'] = 0
+                    
+                    # Update bowler stats
+                    if session['current_bowler_index'] >= 0:
+                        # Calculate proper overs (6 balls = 1 over)
+                        total_balls = session['bowlers'][session['current_bowler_index']]['overs'] * 6 + session['bowlers'][session['current_bowler_index']]['balls']
+                        session['bowlers'][session['current_bowler_index']]['overs'] = total_balls // 6
+                        session['bowlers'][session['current_bowler_index']]['balls'] = total_balls % 6
+                        
+                        # Check for maiden over (0 runs in the over from legal deliveries)
+                        over_runs = 0
+                        start_idx = max(0, len(session['score']) - 6)
+                        for ball in session['score'][start_idx:]:
+                            if not ball['is_extra']:
+                                over_runs += ball['runs']
+
+                        if over_runs == 0:
+                            session['bowlers'][session['current_bowler_index']]['maidens'] += 1
+                    
+                    # Check if innings is complete (all overs bowled)
+                    if session['current_over'] >= session['overs']:
+                        session.modified = True
+                        return redirect(url_for('innings_end'))
+                    
+                    # Redirect to select new bowler for the next over
+                    session.modified = True
+                    return redirect(url_for('select_bowler'))
+                else:
                     session['last_ball_wicket'] = True
                 
                 session.modified = True
@@ -298,6 +356,39 @@ def score():
             else:
                 # Check if this was the last ball of the over
                 if session['current_ball'] >= 6:
+                    # End of over - move to next over with non-striker on strike
+                    session['current_over'] += 1
+                    session['current_ball'] = 0
+                    
+                    # Update bowler stats
+                    if session['current_bowler_index'] >= 0:
+                        # Calculate proper overs (6 balls = 1 over)
+                        total_balls = session['bowlers'][session['current_bowler_index']]['overs'] * 6 + session['bowlers'][session['current_bowler_index']]['balls']
+                        session['bowlers'][session['current_bowler_index']]['overs'] = total_balls // 6
+                        session['bowlers'][session['current_bowler_index']]['balls'] = total_balls % 6
+                        
+                        # Check for maiden over (0 runs in the over from legal deliveries)
+                        over_runs = 0
+                        start_idx = max(0, len(session['score']) - 6)
+                        for ball in session['score'][start_idx:]:
+                            if not ball['is_extra']:
+                                over_runs += ball['runs']
+
+                        if over_runs == 0:
+                            session['bowlers'][session['current_bowler_index']]['maidens'] += 1
+                    
+                    # Check if innings is complete (all overs bowled)
+                    if session['current_over'] >= session['overs']:
+                        session.modified = True
+                        return redirect(url_for('innings_end'))
+                    
+                    # The non-striker becomes the new striker for the next over
+                    session['striker_index'], session['non_striker_index'] = session['non_striker_index'], session['striker_index']
+                    
+                    # Redirect to select new batsman for the next over
+                    session.modified = True
+                    return redirect(url_for('new_batsman'))
+                else:
                     session['last_ball_wicket'] = True
                 
                 # We need to find the correct striker. If the wicket was a runout
@@ -318,7 +409,8 @@ def score():
         wickets_remaining = len(batting_team_players) - session['wickets']
         
         # Switch striker for odd runs only if there's more than one batsman remaining
-        if wickets_remaining > 1 and runs % 2 == 1 and not is_wide:  # Wides don't change strike
+        # Don't rotate strike for runouts as we've already handled that above
+        if not is_run_out and wickets_remaining > 1 and runs % 2 == 1 and not is_wide:  # Wides don't change strike
             session['striker_index'], session['non_striker_index'] = session['non_striker_index'], session['striker_index']
         
         # End of over handling
@@ -430,17 +522,25 @@ def new_batsman():
             "wicket_type": None
         })
         
-        # Find which position the new batsman takes
-        current_batsmen = [b for b in session['batsmen'] if not b['out']]
-        if len(current_batsmen) == 2:
-            # A batsman at the crease got out. We need to find which one
-            out_batsman_name = [b for b in session['batsmen'] if b['out']][-1]['name']
-            if session['batsmen'][session['striker_index']]['name'] == out_batsman_name:
-                session['striker_index'] = len(session['batsmen']) - 1
-            else:
-                session['non_striker_index'] = len(session['batsmen']) - 1
-        else: # This case is for the first two batsmen
+        # Find which position the new batsman takes based on session flags
+        if session.get('striker_index') == -1:
+            # New batsman comes at striker position
             session['striker_index'] = len(session['batsmen']) - 1
+        elif session.get('non_striker_index') == -1:
+            # New batsman comes at non-strike position
+            session['non_striker_index'] = len(session['batsmen']) - 1
+        else:
+            # Default behavior: determine position based on who got out
+            current_batsmen = [b for b in session['batsmen'] if not b['out']]
+            if len(current_batsmen) == 2:
+                # A batsman at the crease got out. We need to find which one
+                out_batsman_name = [b for b in session['batsmen'] if b['out']][-1]['name']
+                if session['batsmen'][session['striker_index']]['name'] == out_batsman_name:
+                    session['striker_index'] = len(session['batsmen']) - 1
+                else:
+                    session['non_striker_index'] = len(session['batsmen']) - 1
+            else: # This case is for the first two batsmen
+                session['striker_index'] = len(session['batsmen']) - 1
         
         # If wicket happened on the last ball of the over
         if session.get('last_ball_wicket', False) and session['current_ball'] >= 6:
@@ -452,7 +552,6 @@ def new_batsman():
         return redirect(url_for('score'))
     
     return render_template('main.html', page="new_batsman", players=available_batsmen)
-
 
 @app.route('/innings_end')
 def innings_end():

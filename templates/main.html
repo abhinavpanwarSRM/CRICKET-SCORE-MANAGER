@@ -9,7 +9,11 @@
       href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Orbitron:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon.png') }}">
+    <link
+      rel="icon"
+      type="image/png"
+      href="{{ url_for('static', filename='icon.png') }}"
+    />
     <style>
       /* Color Palette & Fonts */
       :root {
@@ -1007,12 +1011,22 @@
           </div>
         </div>
 
+        <form
+          id="switchStrikeForm"
+          method="post"
+          action="/switch_strike"
+          style="display: none"
+        >
+          <input type="hidden" name="switch_strike" value="true" />
+        </form>
+
         <div class="players-display">
           <h4>Batsmen on Crease</h4>
           <div class="batsmen-list">
             {% for batsman in batsmen %}
             <div
               class="batsman-stat-box {% if loop.index0 == striker_index %}active{% endif %}"
+              {% if loop.index0 == striker_index %}onclick="switchStrike()" style="cursor: pointer;"{% endif %}
             >
               <span class="batsman-name">{{ batsman.name }}</span>
               <span class="batsman-score"
@@ -1254,9 +1268,16 @@
             setTimeout(() => {
               coin.classList.remove("coin-flip");
               document.getElementById("winner").textContent = data.winner;
+              coin.style.display="none";
+              document.getElementById("toss-button").style.display="none";
               document.getElementById("toss-result").style.display = "flex";
             }, 1000);
           });
+      }
+
+      function switchStrike() {
+      // Submit a form to switch striker and non-striker
+      document.getElementById('switchStrikeForm').submit();
       }
     </script>
   </body>

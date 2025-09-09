@@ -579,6 +579,15 @@ def innings_end():
                               win_type=session['win_type'],
                               team1_name=session['team1_name'],
                               team2_name=session['team2_name'])
+    
+@app.route('/switch_strike', methods=['POST'])
+def switch_strike():
+    # Simply swap the striker and non-striker
+    if 'non_striker_index' in session and session['non_striker_index'] != -1:
+        session['striker_index'], session['non_striker_index'] = session['non_striker_index'], session['striker_index']
+        session.modified = True
+    
+    return redirect(url_for('score'))
 
 @app.route('/download_summary')
 def download_summary():

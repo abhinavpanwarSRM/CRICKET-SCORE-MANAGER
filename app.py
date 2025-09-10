@@ -493,6 +493,230 @@ def new_batsman():
     
     return render_template('main.html', page="new_batsman", players=available_batsmen)
 
+# Add this to your app.py after the imports
+
+class PlayerOfTheMatchEngine:
+    def __init__(self, match_data):
+        self.match_data = match_data
+        self.players = self._compile_player_data()
+    
+    def _compile_player_data(self):
+        """Compile all player performances from both innings"""
+        players = {}
+        
+        # Process batting performances from both innings
+        for inning in ['first_innings_batsmen', 'second_innings_batsmen']:
+            if inning in self.match_data:
+                for batsman in self.match_data[inning]:
+                    name = batsman['name']
+                    if name not in players:
+                        players[name] = {
+                            'name': name,
+                            'runs': 0,
+                            'balls': 0,
+                            'fours': 0,
+                            'sixes': 0,
+                            'strike_rate': 0,
+                            'wickets': 0,
+                            'overs': 0,
+                            'maidens': 0,
+                            'bowling_runs': 0,
+                            'economy': 0,
+                            'catches': 0,
+                            'run_outs': 0,
+                            'stumpings': 0,
+                            'team': self._get_player_team(name),
+                            'impact_score': 0
+                        }
+                    
+                    players[name]['runs'] += batsman['runs']
+                    players[name]['balls'] += batsman['balls']
+                    players[name]['fours'] += batsman['fours']
+                    players[name]['sixes'] += batsman['sixes']
+                    
+                    # Calculate strike rate
+                    if batsman['balls'] > 0:
+                        sr = (batsman['runs'] / batsman['balls']) * 100
+                        # Weighted average for strike rate
+                        if players[name]['strike_rate'] > 0:
+                            total_balls = players[name]['balls']
+                            players[name]['strike_rate'] = (
+                                (players[name]['strike_rate'] * (total_balls - batsman['balls'])) + 
+                                (sr * batsman['balls'])
+                            ) / total_balls
+                        else:
+                            players[name]['strike_rate'] = sr
+        
+        # Process bowling performances from both innings
+        for inning in ['first_innings_bowlers', 'second_innings_bowlers']:
+            if inning in self.match_data:
+                for bowler in self.match_data[inning]:
+                    name = bowler['name']
+                    if name not in players:
+                        players[name] = {
+                            'name': name,
+                            'runs': 0,
+                            'balls': 0,
+                            'fours': 0,
+                            'sixes': 0,
+                            'strike_rate': 0,
+                            'wickets': 0,
+                            'overs': 0,
+                            'maidens': 0,
+                            'bowling_runs': 0,
+                            'economy': 0,
+                            'catches': 0,
+                            'run_outs': 0,
+                            'stumpings': 0,
+                            'team': self._get_player_team(name),
+                            'impact_score': 0
+                        }
+                    
+                    # Convert overs to balls for calculation
+                    bowler_balls = bowler['overs'] * 6 + bowler['balls']
+                    players[name]['wickets'] += bowler['wickets']
+                    players[name]['maidens'] += bowler['maidens']
+                    players[name]['bowling_runs'] += bowler['runs']
+                    
+                    # Calculate economy rate
+                    if bowler_balls > 0:
+                        economy = (bowler['runs'] / bowler_balls) * 6
+                        # Weighted average for economy
+                        total_balls = players[name].get('bowling_balls', 0) + bowler_balls
+                        if players[name].get('economy', 0) > 0:
+                            players[name]['economy'] = (
+                                (players[name]['economy'] * players[name].get('bowling_balls', 0)) + 
+                                (economy * bowler_balls)
+                            ) / total_balls
+                        else:
+                            players[name]['economy'] = economy
+                        players[name]['bowling_balls'] = total_balls
+        
+        # Process fielding data from ball-by-ball commentary
+        self._process_fielding_stats(players)
+        
+        return players
+    
+    def _get_player_team(self, player_name):
+        """Determine which team a player belongs to"""
+        if 'team1' in self.match_data and player_name in self.match_data['team1']:
+            return self.match_data['team1_name']
+        elif 'team2' in self.match_data and player_name in self.match_data['team2']:
+            return self.match_data['team2_name']
+        return "Unknown"
+    
+    def _process_fielding_stats(self, players):
+        """Process fielding statistics from ball-by-ball data"""
+        if 'score' not in self.match_data:
+            return
+        
+        for ball in self.match_data['score']:
+            # Check for catches (assuming caught wickets)
+            if ball.get('is_wicket') and ball.get('wicket_type') == 'Caught':
+                # The bowler gets the wicket, but we need to track who took the catch
+                # This would require additional data tracking in your app
+                pass
+            
+            # Check for run outs
+            if ball.get('is_wicket') and ball.get('wicket_type') == 'Run Out':
+                # This would require tracking who effected the run out
+                pass
+            
+            # Check for stumpings
+            if ball.get('is_wicket') and ball.get('wicket_type') == 'Stumped':
+                # The wicketkeeper gets credit
+                pass
+    
+    def calculate_impact_scores(self):
+        """Calculate impact scores for all players"""
+        for name, player in self.players.items():
+            # Batting impact (runs, strike rate, boundaries)
+            batting_score = (
+                player['runs'] * 1.0 +  # Base runs
+                player['fours'] * 0.5 +  # Bonus for boundaries
+                player['sixes'] * 1.0 +  # Bonus for sixes
+                (player['strike_rate'] - 100) * 0.1 if player['strike_rate'] > 100 else 0  # Bonus for high SR
+            )
+            
+            # Bowling impact (wickets, economy, maidens)
+            bowling_score = (
+                player['wickets'] * 20.0 +  # Base for wickets
+                (100 - player['economy'] * 10) if player.get('economy', 0) > 0 else 0 +  # Bonus for good economy
+                player['maidens'] * 5.0  # Bonus for maidens
+            )
+            
+            # Fielding impact (catches, runouts, stumpings)
+            fielding_score = (
+                player['catches'] * 10.0 +
+                player['run_outs'] * 15.0 +
+                player['stumpings'] * 12.0
+            )
+            
+            # Match situation impact (bonus for performance in winning team)
+            winning_team = self.match_data.get('winner', '')
+            match_impact = 1.2 if player['team'] == winning_team else 1.0
+            
+            # Calculate total impact score
+            player['impact_score'] = (batting_score + bowling_score + fielding_score) * match_impact
+            player['batting_score'] = batting_score
+            player['bowling_score'] = bowling_score
+            player['fielding_score'] = fielding_score
+    
+    def get_player_of_the_match(self):
+        """Determine the player of the match"""
+        self.calculate_impact_scores()
+        
+        if not self.players:
+            return None
+        
+        # Find player with highest impact score
+        potm = max(self.players.values(), key=lambda x: x['impact_score'])
+        
+        # Prepare performance summary
+        performance_summary = []
+        if potm['batting_score'] > 0:
+            performance_summary.append(f"{potm['runs']} runs")
+        if potm['bowling_score'] > 0:
+            performance_summary.append(f"{potm['wickets']} wickets")
+        if potm['fielding_score'] > 0:
+            fielding_actions = []
+            if potm['catches'] > 0:
+                fielding_actions.append(f"{potm['catches']} catches")
+            if potm['run_outs'] > 0:
+                fielding_actions.append(f"{potm['run_outs']} run outs")
+            if potm['stumpings'] > 0:
+                fielding_actions.append(f"{potm['stumpings']} stumpings")
+            if fielding_actions:
+                performance_summary.append(", ".join(fielding_actions))
+        
+        return {
+            'player': potm['name'],
+            'team': potm['team'],
+            'impact_score': round(potm['impact_score'], 2),
+            'performance': ", ".join(performance_summary),
+            'details': {
+                'runs': potm['runs'],
+                'wickets': potm['wickets'],
+                'catches': potm['catches'],
+                'run_outs': potm['run_outs'],
+                'stumpings': potm['stumpings']
+            }
+        }
+    
+    def get_top_performers(self, count=3):
+        """Get top performers of the match"""
+        self.calculate_impact_scores()
+        
+        if not self.players:
+            return []
+        
+        sorted_players = sorted(
+            self.players.values(), 
+            key=lambda x: x['impact_score'], 
+            reverse=True
+        )
+        
+        return sorted_players[:count]
 
 @app.route('/innings_end')
 def innings_end():
@@ -562,6 +786,24 @@ def innings_end():
             session['win_margin'] = ""
             session['win_type'] = "tie"
         
+        # Calculate Player of the Match
+        match_data = {
+            'team1_name': session['team1_name'],
+            'team2_name': session['team2_name'],
+            'team1': session['team1'],
+            'team2': session['team2'],
+            'first_innings_batsmen': session['first_innings_batsmen'],
+            'first_innings_bowlers': session['first_innings_bowlers'],
+            'second_innings_batsmen': session['second_innings_batsmen'],
+            'second_innings_bowlers': session['second_innings_bowlers'],
+            'score': session['score'],
+            'winner': session['winner']
+        }
+        
+        potm_engine = PlayerOfTheMatchEngine(match_data)
+        session['player_of_match'] = potm_engine.get_player_of_the_match()
+        session['top_performers'] = potm_engine.get_top_performers(3)
+        
         return render_template('main.html', 
                               page="match_result", 
                               first_innings_total=session['first_innings_total'],
@@ -578,7 +820,9 @@ def innings_end():
                               win_margin=session['win_margin'],
                               win_type=session['win_type'],
                               team1_name=session['team1_name'],
-                              team2_name=session['team2_name'])
+                              team2_name=session['team2_name'],
+                              player_of_match=session['player_of_match'],
+                              top_performers=session['top_performers'])
     
 @app.route('/switch_strike', methods=['POST'])
 def switch_strike():
@@ -604,10 +848,19 @@ def download_summary():
     output.write(f"Toss Winner: {session['toss_winner']}\n")
     output.write(f"Batting First: {session['batting_team'] if session['innings'] == 1 else session['bowling_team']}\n\n")
     
+    # Write Player of the Match information
+    if 'player_of_match' in session and session['player_of_match']:
+        output.write("PLAYER OF THE MATCH\n")
+        output.write("-" * 20 + "\n")
+        output.write(f"{session['player_of_match']['player']} ({session['player_of_match']['team']})\n")
+        output.write(f"Performance: {session['player_of_match']['performance']}\n")
+        output.write(f"Impact Score: {session['player_of_match']['impact_score']}\n\n")
+    
     # Write first innings summary
     output.write("FIRST INNINGS\n")
     output.write("-" * 15 + "\n")
-    output.write(f"{session['team1_name'] if session['innings'] == 1 else session['team2_name']}: {session['first_innings_total']}/{session['first_innings_wickets']} in {session['first_innings_overs']} overs\n\n")
+    batting_first_team = session['team1_name'] if session['innings'] == 1 else session['team2_name']
+    output.write(f"{batting_first_team}: {session['first_innings_total']}/{session['first_innings_wickets']} in {session['first_innings_overs']} overs\n\n")
     
     output.write("BATTING PERFORMANCE\n")
     output.write("-" * 20 + "\n")
@@ -615,7 +868,7 @@ def download_summary():
     for batsman in session['first_innings_batsmen']:
         strikerate = round(batsman['runs'] / batsman['balls'] * 100, 2) if batsman['balls'] > 0 else 0
         status = f"OUT ({batsman['wicket_type']})" if batsman['out'] else "not out"
-        output.write(f"{batsman['name']:<20} {batsman['runs']:<6} {batsman['balls']:<6} {batsman['fours']:<4} {batsman['sixes']:<4} {strikerate:<8} {status:<15}\n")
+        output.write(f"{batsman['name']:<20} {batsman['runs']:<6} {batsman['balls']:<6} {batsman['fours']:<4} {batsman['sixes']:<4} {strikerate:<8.2f} {status:<15}\n")
     output.write("\n")
     
     output.write("BOWLING PERFORMANCE\n")
@@ -624,13 +877,14 @@ def download_summary():
     for bowler in session['first_innings_bowlers']:
         overs = f"{bowler['overs']}.{bowler['balls']}"
         economy = bowler.get('economy', 0)
-        output.write(f"{bowler['name']:<20} {overs:<6} {bowler['maidens']:<8} {bowler['runs']:<6} {bowler['wickets']:<8} {economy:<8}\n")
+        output.write(f"{bowler['name']:<20} {overs:<6} {bowler['maidens']:<8} {bowler['runs']:<6} {bowler['wickets']:<8} {economy:<8.2f}\n")
     output.write("\n")
     
     # Write second innings summary
     output.write("SECOND INNINGS\n")
     output.write("-" * 15 + "\n")
-    output.write(f"{session['team2_name'] if session['innings'] == 1 else session['team1_name']}: {session['second_innings_total']}/{session['second_innings_wickets']} in {session['second_innings_overs']} overs\n\n")
+    batting_second_team = session['team2_name'] if session['innings'] == 1 else session['team1_name']
+    output.write(f"{batting_second_team}: {session['second_innings_total']}/{session['second_innings_wickets']} in {session['second_innings_overs']} overs\n\n")
     
     output.write("BATTING PERFORMANCE\n")
     output.write("-" * 20 + "\n")
@@ -638,15 +892,16 @@ def download_summary():
     for batsman in session['second_innings_batsmen']:
         strikerate = round(batsman['runs'] / batsman['balls'] * 100, 2) if batsman['balls'] > 0 else 0
         status = f"OUT ({batsman['wicket_type']})" if batsman['out'] else "not out"
-        output.write(f"{batsman['name']:<20} {batsman['runs']:<6} {batsman['balls']:<6} {batsman['fours']:<4} {batsman['sixes']:<4} {strikerate:<8} {status:<15}\n")
+        output.write(f"{batsman['name']:<20} {batsman['runs']:<6} {batsman['balls']:<6} {batsman['fours']:<4} {batsman['sixes']:<4} {strikerate:<8.2f} {status:<15}\n")
     output.write("\n")
     
     output.write("BOWLING PERFORMANCE\n")
     output.write("-" * 20 + "\n")
+    output.write(f"{'Bowler':<20} {'Overs':<6} {'Maidens':<8} {'Runs':<6} {'Wickets':<8} {'Economy':<8}\n")
     for bowler in session['second_innings_bowlers']:
         overs = f"{bowler['overs']}.{bowler['balls']}"
         economy = bowler.get('economy', 0)
-        output.write(f"{bowler['name']:<20} {overs:<6} {bowler['maidens']:<8} {bowler['runs']:<6} {bowler['wickets']:<8} {economy:<8}\n")
+        output.write(f"{bowler['name']:<20} {overs:<6} {bowler['maidens']:<8} {bowler['runs']:<6} {bowler['wickets']:<8} {economy:<8.2f}\n")
     output.write("\n")
     
     # Write match result
@@ -656,6 +911,31 @@ def download_summary():
         output.write("Match Tied\n")
     else:
         output.write(f"{session['winner']} won by {session['win_margin']}\n")
+    
+    # Write Top Performers section
+    if 'top_performers' in session and session['top_performers']:
+        output.write("\nTOP PERFORMERS\n")
+        output.write("-" * 15 + "\n")
+        for i, player in enumerate(session['top_performers'], 1):
+            performance_parts = []
+            if player.get('runs', 0) > 0:
+                performance_parts.append(f"{player['runs']} runs")
+            if player.get('wickets', 0) > 0:
+                performance_parts.append(f"{player['wickets']} wickets")
+            if player.get('catches', 0) > 0:
+                performance_parts.append(f"{player['catches']} catches")
+            if player.get('run_outs', 0) > 0:
+                performance_parts.append(f"{player['run_outs']} run outs")
+            if player.get('stumpings', 0) > 0:
+                performance_parts.append(f"{player['stumpings']} stumpings")
+                
+            performance_str = ", ".join(performance_parts)
+            output.write(f"{i}. {player['name']} ({player['team']}): {performance_str} - Impact: {player.get('impact_score', 0):.2f}\n")
+    
+    # Write match details footer
+    output.write("\n" + "=" * 60 + "\n")
+    output.write(f"Match recorded on: {datetime.now().strftime('%d-%m-%Y at %H:%M:%S')}\n")
+    output.write("Copyright © 2025 Abhinav Panwar. All Rights Reserved.\n")
     
     # Prepare response
     output.seek(0)

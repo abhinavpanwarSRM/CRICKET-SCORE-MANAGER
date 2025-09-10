@@ -493,8 +493,6 @@ def new_batsman():
     
     return render_template('main.html', page="new_batsman", players=available_batsmen)
 
-# Add this to your app.py after the imports
-
 class PlayerOfTheMatchEngine:
     def __init__(self, match_data):
         self.match_data = match_data
@@ -522,9 +520,6 @@ class PlayerOfTheMatchEngine:
                             'maidens': 0,
                             'bowling_runs': 0,
                             'economy': 0,
-                            'catches': 0,
-                            'run_outs': 0,
-                            'stumpings': 0,
                             'team': self._get_player_team(name),
                             'impact_score': 0
                         }
@@ -565,9 +560,6 @@ class PlayerOfTheMatchEngine:
                             'maidens': 0,
                             'bowling_runs': 0,
                             'economy': 0,
-                            'catches': 0,
-                            'run_outs': 0,
-                            'stumpings': 0,
                             'team': self._get_player_team(name),
                             'impact_score': 0
                         }
@@ -592,9 +584,6 @@ class PlayerOfTheMatchEngine:
                             players[name]['economy'] = economy
                         players[name]['bowling_balls'] = total_balls
         
-        # Process fielding data from ball-by-ball commentary
-        self._process_fielding_stats(players)
-        
         return players
     
     def _get_player_team(self, player_name):
@@ -605,62 +594,32 @@ class PlayerOfTheMatchEngine:
             return self.match_data['team2_name']
         return "Unknown"
     
-    def _process_fielding_stats(self, players):
-        """Process fielding statistics from ball-by-ball data"""
-        if 'score' not in self.match_data:
-            return
-        
-        for ball in self.match_data['score']:
-            # Check for catches (assuming caught wickets)
-            if ball.get('is_wicket') and ball.get('wicket_type') == 'Caught':
-                # The bowler gets the wicket, but we need to track who took the catch
-                # This would require additional data tracking in your app
-                pass
-            
-            # Check for run outs
-            if ball.get('is_wicket') and ball.get('wicket_type') == 'Run Out':
-                # This would require tracking who effected the run out
-                pass
-            
-            # Check for stumpings
-            if ball.get('is_wicket') and ball.get('wicket_type') == 'Stumped':
-                # The wicketkeeper gets credit
-                pass
-    
     def calculate_impact_scores(self):
-        """Calculate impact scores for all players"""
+        """Calculate impact scores optimized for 5-10 over matches"""
         for name, player in self.players.items():
-            # Batting impact (runs, strike rate, boundaries)
+            # Batting impact - more weight for boundaries and SR in short format
             batting_score = (
                 player['runs'] * 1.0 +  # Base runs
-                player['fours'] * 0.5 +  # Bonus for boundaries
-                player['sixes'] * 1.0 +  # Bonus for sixes
-                (player['strike_rate'] - 100) * 0.1 if player['strike_rate'] > 100 else 0  # Bonus for high SR
+                player['fours'] * 1.0 +  # Increased boundary bonus
+                player['sixes'] * 2.0 +  # Increased six bonus
+                (player['strike_rate'] - 120) * 0.7 if player['strike_rate'] > 120 else 0  # Higher SR threshold
             )
             
-            # Bowling impact (wickets, economy, maidens)
+            # Bowling impact - wickets are extremely valuable in short format
             bowling_score = (
-                player['wickets'] * 20.0 +  # Base for wickets
-                (100 - player['economy'] * 10) if player.get('economy', 0) > 0 else 0 +  # Bonus for good economy
-                player['maidens'] * 5.0  # Bonus for maidens
+                player['wickets'] * 18.0 +  # High value for wickets
+                (25 - player['economy'] * 2.5) if player.get('economy', 0) > 0 else 0 +  # Economy bonus
+                player['maidens'] * 8.0  # Maidens are very valuable in short games
             )
             
-            # Fielding impact (catches, runouts, stumpings)
-            fielding_score = (
-                player['catches'] * 10.0 +
-                player['run_outs'] * 15.0 +
-                player['stumpings'] * 12.0
-            )
-            
-            # Match situation impact (bonus for performance in winning team)
+            # Match situation impact
             winning_team = self.match_data.get('winner', '')
-            match_impact = 1.2 if player['team'] == winning_team else 1.0
+            match_impact = 1.25 if player['team'] == winning_team else 1.0
             
             # Calculate total impact score
-            player['impact_score'] = (batting_score + bowling_score + fielding_score) * match_impact
+            player['impact_score'] = (batting_score + bowling_score) * match_impact
             player['batting_score'] = batting_score
             player['bowling_score'] = bowling_score
-            player['fielding_score'] = fielding_score
     
     def get_player_of_the_match(self):
         """Determine the player of the match"""
@@ -678,16 +637,6 @@ class PlayerOfTheMatchEngine:
             performance_summary.append(f"{potm['runs']} runs")
         if potm['bowling_score'] > 0:
             performance_summary.append(f"{potm['wickets']} wickets")
-        if potm['fielding_score'] > 0:
-            fielding_actions = []
-            if potm['catches'] > 0:
-                fielding_actions.append(f"{potm['catches']} catches")
-            if potm['run_outs'] > 0:
-                fielding_actions.append(f"{potm['run_outs']} run outs")
-            if potm['stumpings'] > 0:
-                fielding_actions.append(f"{potm['stumpings']} stumpings")
-            if fielding_actions:
-                performance_summary.append(", ".join(fielding_actions))
         
         return {
             'player': potm['name'],
@@ -696,10 +645,7 @@ class PlayerOfTheMatchEngine:
             'performance': ", ".join(performance_summary),
             'details': {
                 'runs': potm['runs'],
-                'wickets': potm['wickets'],
-                'catches': potm['catches'],
-                'run_outs': potm['run_outs'],
-                'stumpings': potm['stumpings']
+                'wickets': potm['wickets']
             }
         }
     

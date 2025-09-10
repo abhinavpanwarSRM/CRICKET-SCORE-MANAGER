@@ -868,12 +868,6 @@ def download_summary():
                 performance_parts.append(f"{player['runs']} runs")
             if player.get('wickets', 0) > 0:
                 performance_parts.append(f"{player['wickets']} wickets")
-            if player.get('catches', 0) > 0:
-                performance_parts.append(f"{player['catches']} catches")
-            if player.get('run_outs', 0) > 0:
-                performance_parts.append(f"{player['run_outs']} run outs")
-            if player.get('stumpings', 0) > 0:
-                performance_parts.append(f"{player['stumpings']} stumpings")
                 
             performance_str = ", ".join(performance_parts)
             output.write(f"{i}. {player['name']} ({player['team']}): {performance_str} - Impact: {player.get('impact_score', 0):.2f}\n")

@@ -291,6 +291,11 @@
               {% endif %}
             </div>
             {% endfor %}
+            {% if batsmen|length < 2 and session.innings == 2 and session.wickets < (session.team1|length if session.batting_team == session.team1_name else session.team2|length) - 1 %}
+            <div class="batsman-stat-box incoming">
+              <span class="batsman-name">New batsman needed</span>
+            </div>
+            {% endif %}
           </div>
           {% if free_hit %}
           <div class="free-hit">FREE HIT</div>
@@ -306,9 +311,15 @@
           <div class="overs-final">
             in {{ session.current_over }}.{{ session.current_ball }} overs
           </div>
+          {% if session.innings == 1 %}
           <a href="{{ url_for('select_batsmen') }}" class="btn btn-next-innings"
             >Start Second Innings</a
           >
+          {% else %}
+          <a href="{{ url_for('match_result') }}" class="btn btn-next-innings"
+            >View Match Result</a
+          >
+          {% endif %}
         </div>
         {% endif %} {% if page == "match_result" %}
         <div class="card broadcast-card result-card">
@@ -318,9 +329,21 @@
             {% else %} Match Tied {% endif %}
           </div>
 
+          <!-- Player of the Match Section -->
+          {% if player_of_match %}
+          <div class="potm-section">
+            <h3>Player of the Match</h3>
+            <div class="potm-player">
+              <div class="potm-name">{{ player_of_match.player }} ({{ player_of_match.team }})</div>
+              <div class="potm-performance">{{ player_of_match.performance }}</div>
+              <div class="potm-impact">Impact Score: {{ player_of_match.impact_score }}</div>
+            </div>
+          </div>
+          {% endif %}
+
           <div class="match-summary">
             <div class="summary-section">
-              <div class="summary-header">First Innings</div>
+              <div class="summary-header">First & Second Innings</div>
               <div class="innings-summary">
                 <div class="innings-card">
                   <div class="innings-title">{{ team1_name }}</div>
@@ -355,6 +378,26 @@
               </p>
             </div>
           </div>
+
+          <!-- Top Performers Section -->
+          {% if top_performers %}
+          <div class="top-performers">
+            <h3>Top Performers</h3>
+            <div class="performers-list">
+              {% for player in top_performers %}
+              <div class="performer-card">
+                <div class="performer-name">{{ player.name }} ({{ player.team }})</div>
+                <div class="performer-stats">
+                  {% if player.runs > 0 %}{{ player.runs }} runs{% endif %}
+                  {% if player.wickets > 0 %}{{ player.wickets }} wickets{% endif %}
+                  {% if player.catches > 0 %}{{ player.catches }} catches{% endif %}
+                </div>
+                <div class="performer-impact">Impact: {{ player.impact_score|round(2) }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
 
           <div class="result-actions">
             <a href="/download_summary" class="btn btn-submit"

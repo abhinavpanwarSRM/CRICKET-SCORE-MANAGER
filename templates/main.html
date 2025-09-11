@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cricket Score Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Orbitron:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="{{ url_for('static', filename='icon.png') }}"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="main-content">
+      <div class="score-panel">
+        {% if page == "home" %}
+        <div class="card broadcast-card welcome-card">
+          <h2>Cricket Score Manager</h2>
+          <p>
+            Track your cricket match with real-time scoring and detailed
+            statistics.
+          </p>
+          <a href="/add_players" class="btn btn-start">Start New Match</a>
+        </div>
+        {% endif %} {% if page == "add_players" %}
+        <div class="card broadcast-card setup-card">
+          <h2>Setup Teams & Players</h2>
+          <form
+            method="post"
+            id="players-form"
+            onsubmit="return validateForm()"
+          >
+            <div class="team-setup-section">
+              <h3>Team 1</h3>
+              <div class="form-group">
+                <input
+                  type="text"
+                  name="team1_name"
+                  placeholder="Team 1 Name"
+                  required
+                  oninput="this.value = this.value.toUpperCase()"
+                />
+              </div>
+              <div id="team1-players" class="player-list">
+                <div class="player-input">
+                  <input
+                    type="text"
+                    name="team1"
+                    placeholder="Player 1"
+                    required
+                    oninput="this.value = this.value.toUpperCase()"
+                  />
+                </div>
+                <div class="player-input">
+                  <input
+                    type="text"
+                    name="team1"
+                    placeholder="Player 2"
+                    required
+                    oninput="this.value = this.value.toUpperCase()"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-add-player"
+                onclick="addPlayer('team1')"
+              >
+                + Add Player
+              </button>
+            </div>
+
+            <div class="team-setup-section">
+              <h3>Team 2</h3>
+              <div class="form-group">
+                <input
+                  type="text"
+                  name="team2_name"
+                  placeholder="Team 2 Name"
+                  required
+                  oninput="this.value = this.value.toUpperCase()"
+                />
+              </div>
+              <div id="team2-players" class="player-list">
+                <div class="player-input">
+                  <input
+                    type="text"
+                    name="team2"
+                    placeholder="Player 1"
+                    required
+                    oninput="this.value = this.value.toUpperCase()"
+                  />
+                </div>
+                <div class="player-input">
+                  <input
+                    type="text"
+                    name="team2"
+                    placeholder="Player 2"
+                    required
+                    oninput="this.value = this.value.toUpperCase()"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-add-player"
+                onclick="addPlayer('team2')"
+              >
+                + Add Player
+              </button>
+            </div>
+
+            <div class="form-group match-details">
+              <label for="overs">Number of Overs:</label>
+              <input type="number" name="overs" min="1" required />
+            </div>
+
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+
+            <button type="submit" class="btn btn-submit">
+              Continue to Toss
+            </button>
+          </form>
+        </div>
+        {% endif %} {% if page == "toss" %}
+        <div class="card broadcast-card toss-card">
+          <h2>Toss Time!</h2>
+          <p>
+            Click the Flip coin Button to determine which team wins the Toss
+          </p>
+
+          <div class="toss-container">
+            <div class="teams-display">
+              <div class="team-name">{{ session.team1_name }}</div>
+              <div class="team-name">VS</div>
+              <div class="team-name">{{ session.team2_name }}</div>
+            </div>
+
+            <div class="coin-toss-area">
+              <div class="coin" id="coin">
+                <div class="coin-side coin-front">{{ session.team1_name }}</div>
+                <div class="coin-side coin-back">{{ session.team2_name }}</div>
+              </div>
+              <button
+                onclick="performToss()"
+                class="btn btn-start"
+                id="toss-button"
+              >
+                Flip Coin
+              </button>
+            </div>
+
+            <div id="toss-result" class="toss-result" style="display: none">
+              <div class="toss-winner">
+                <span id="winner"></span>
+              </div>
+              <form method="post" action="/toss_decision" class="toss-choices">
+                <button name="choice" value="bat" class="btn btn-choice">
+                  Bat First
+                </button>
+                <button name="choice" value="bowl" class="btn btn-choice">
+                  Bowl First
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %} {% if page == "select_batsmen" or page == "select_bowler" %}
+        <div class="card broadcast-card selection-card">
+          <h2>
+            Select {% if page == "select_batsmen" %}Opening Batsmen{% else
+            %}Bowler{% endif %}
+          </h2>
+          {% if session.innings == 2 %}
+          <div class="target-info">
+            <h3>Target: {{ session.first_innings_total + 1 }} runs</h3>
+          </div>
+          {% endif %} {% if session.previous_bowler %}
+          <p class="prev-bowler-info">
+            Previous bowler
+            <strong>{{ session.previous_bowler }}</strong> cannot bowl
+            consecutive overs.
+          </p>
+          {% endif %}
+          <form method="post">
+            {% if page == "select_batsmen" %}
+            <div class="form-group">
+              <label for="striker">Striker:</label>
+              <select name="striker" id="striker" required>
+                {% for player in players %}
+                <option value="{{ player }}">{{ player }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="non_striker">Non-Striker:</label>
+              <select name="non_striker" id="non_striker" required>
+                {% for player in players %}
+                <option value="{{ player }}">{{ player }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% elif page == "select_bowler" %}
+            <div class="form-group">
+              <label for="bowler">Bowler:</label>
+              <select name="bowler" id="bowler" required>
+                {% for player in players %}
+                <option value="{{ player }}">{{ player }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endif %}
+            <button type="submit" class="btn btn-submit">
+              Start {% if page == "select_batsmen" %}Innings{% else %}Over{%
+              endif %}
+            </button>
+          </form>
+        </div>
+        {% endif %} {% if page == "score" %}
+        <div class="main-score-area">
+          <div class="score-display">
+            <span class="score-runs">{{ total_runs }}</span>
+            <span class="score-wickets">/{{ wickets }}</span>
+            <span class="score-overs"
+              >({{ current_over }}.{{ current_ball }} Overs)</span
+            >
+          </div>
+          <div class="team-names">
+            <span class="batting-team">{{ batting_team }}</span> vs
+            <span class="bowling-team">{{ bowling_team }}</span>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stats-item">
+            <div class="stats-label">Run Rate</div>
+            <div class="stats-value">{{ current_run_rate }}</div>
+          </div>
+          {% if session.innings == 2 %}
+          <div class="stats-item">
+            <div class="stats-label">Required</div>
+            <div class="stats-value">
+              {{ session.first_innings_total + 1 - total_runs }} Runs
+            </div>
+          </div>
+          <div class="stats-item">
+            <div class="stats-label">From</div>
+            <div class="stats-value">
+              {{ (session.overs * 6) - (current_over * 6 + current_ball) }}
+              Balls
+            </div>
+          </div>
+          {% endif %}
+          <div class="stats-item">
+            <div class="stats-label">Bowler</div>
+            <div class="stats-value">{{ current_bowler }}</div>
+          </div>
+        </div>
+
+        <form
+          id="switchStrikeForm"
+          method="post"
+          action="/switch_strike"
+          style="display: none"
+        >
+          <input type="hidden" name="switch_strike" value="true" />
+        </form>
+
+        <div class="players-display">
+          <h4>Batsmen on Crease</h4>
+          <div class="batsmen-list">
+            {% for batsman in batsmen %}
+            <div
+              class="batsman-stat-box {% if loop.index0 == striker_index %}active{% endif %}"
+              {% if loop.index0 == striker_index %}onclick="switchStrike()" style="cursor: pointer;"{% endif %}
+            >
+              <span class="batsman-name">{{ batsman.name }}</span>
+              <span class="batsman-score"
+                >{{ batsman.runs }}({{ batsman.balls }})</span
+              >
+              {% if batsman.out %}
+              <span class="out-status">(OUT)</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% if free_hit %}
+          <div class="free-hit">FREE HIT</div>
+          {% endif %}
+        </div>
+        {% endif %} {% if page == "innings_end" %}
+        <div class="card broadcast-card innings-summary">
+          <h2>Innings Complete</h2>
+          <div class="score-final">
+            {{ session.batting_team }}: <span>{{ session.total_runs }}</span>/{{
+            session.wickets }}
+          </div>
+          <div class="overs-final">
+            in {{ session.current_over }}.{{ session.current_ball }} overs
+          </div>
+          <a href="{{ url_for('select_batsmen') }}" class="btn btn-next-innings"
+            >Start Second Innings</a
+          >
+        </div>
+        {% endif %} {% if page == "match_result" %}
+        <div class="card broadcast-card result-card">
+          <h2>Match Result</h2>
+          <div class="winner">
+            {% if winner != "Match Tied" %} {{ winner }} won by {{ win_margin }}
+            {% else %} Match Tied {% endif %}
+          </div>
+
+          <div class="match-summary">
+            <div class="summary-section">
+              <div class="summary-header">First Innings</div>
+              <div class="innings-summary">
+                <div class="innings-card">
+                  <div class="innings-title">{{ team1_name }}</div>
+                  <div class="innings-score">
+                    {{ first_innings_total }}/{{ first_innings_wickets }}
+                  </div>
+                  <div class="innings-overs">
+                    {{ first_innings_overs }} overs
+                  </div>
+                </div>
+                <div class="innings-card">
+                  <div class="innings-title">{{ team2_name }}</div>
+                  <div class="innings-score">
+                    {{ second_innings_total }}/{{ second_innings_wickets }}
+                  </div>
+                  <div class="innings-overs">
+                    {{ second_innings_overs }} overs
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="summary-section">
+              <div class="summary-header">Match Summary</div>
+              <p><strong>Toss Winner:</strong> {{ session.toss_winner }}</p>
+              <p>
+                <strong>Batting First:</strong> {{ session.batting_team if
+                session.innings == 1 else session.bowling_team }}
+              </p>
+              <p>
+                <strong>Result:</strong> {{ winner }} won by {{ win_margin }}
+              </p>
+            </div>
+          </div>
+
+          <div class="result-actions">
+            <a href="/download_summary" class="btn btn-submit"
+              >Download Summary</a
+            >
+            <a href="/" class="btn btn-danger">Home</a>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="control-panel">
+        {% if page == "score" %}
+        <div class="card broadcast-card form-card">
+          <h3>Record Ball</h3>
+          <form method="post">
+            <div class="form-group">
+              <label for="runs">Runs scored:</label>
+              <select
+                name="runs"
+                id="runs"
+                required
+                onchange="toggleExtraOptions()"
+              >
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="-1">Wide (+1)</option>
+                <option value="-2">No Ball (+1)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="is_wicket">
+                <input
+                  type="checkbox"
+                  name="is_wicket"
+                  id="is_wicket"
+                  onchange="toggleWicketType()"
+                />
+                Wicket?
+              </label>
+            </div>
+            <div id="wicket_type_div" class="form-group" style="display: none">
+              <label for="wicket_type">Wicket Type:</label>
+              <select
+                name="wicket_type"
+                id="wicket_type"
+                onchange="toggleRunOutBatsman()"
+              >
+                <option value="Bowled">Bowled</option>
+                <option value="Caught">Caught</option>
+                <option value="LBW">LBW</option>
+                <option value="Run Out">Run Out</option>
+                <option value="Stumped">Stumped</option>
+                <option value="Hit Wicket">Hit Wicket</option>
+              </select>
+            </div>
+            <div
+              id="run_out_batsman_div"
+              class="form-group"
+              style="display: none"
+            >
+              <label for="run_out_batsman">Run Out Batsman:</label>
+              <select name="run_out_batsman" id="run_out_batsman">
+                {% for batsman in batsmen %}
+                <option value="{{ batsman.name }}">{{ batsman.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="submit" class="btn btn-submit">Add Ball</button>
+          </form>
+          <a href="{{ url_for('innings_end') }}" class="btn btn-danger"
+            >End Innings</a
+          >
+        </div>
+
+        <div class="card broadcast-card commentary-card">
+          <h3>Ball-by-ball Commentary</h3>
+          <div class="commentary">
+            {% for ball in score|reverse %}
+            <div class="ball-event">
+              <span class="event-time">{{ ball.over }}.{{ ball.ball }}</span>
+              <span class="event-text">
+                {{ ball.bowler }} to {{ ball.batsman }} - {% if ball.runs >= 0
+                %} {{ ball.runs }} run{% if ball.runs != 1 %}s{% endif %} {%
+                else %} {% if ball.runs == -1 %} Wide {% elif ball.runs == -2 %}
+                No Ball {% endif %} {% endif %} {% if ball.is_wicket %} and is
+                OUT ({{ ball.wicket_type }}) {% endif %}
+              </span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %} {% if page == "new_batsman" %}
+        <div class="card broadcast-card form-card">
+          <h2>Select New Batsman</h2>
+          <form method="post">
+            <div class="form-group">
+              <label for="new_batsman">New Batsman:</label>
+              <select name="new_batsman" id="new_batsman" required>
+                {% for player in players %}
+                <option value="{{ player }}">{{ player }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="submit" class="btn btn-submit">Continue</button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>
